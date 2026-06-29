@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyc
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Model weights and checkpoints — these live on HuggingFace, not git
+outputs/
+*.safetensors
+*.pt
+*.bin
+
+# Logs (keep text logs, skip huge binary pycache in eval)
+eval/__pycache__/
+train/__pycache__/
+
+# OS
+.DS_Store
+.claude
