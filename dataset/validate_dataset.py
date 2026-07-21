@@ -5,7 +5,8 @@ import json, re, sys, glob, pathlib
 from collections import Counter
 
 HERE = pathlib.Path(__file__).resolve().parent
-FILES = [HERE / "muslim_lora_train.jsonl", HERE / "muslim_lora_val.jsonl"]
+_files_arg = sys.argv[1:] if len(sys.argv) > 1 else ["muslim_lora_train_v4.jsonl", "muslim_lora_val_v4.jsonl"]
+FILES = [HERE / f for f in _files_arg]
 
 VALID_SURAH = range(1, 115)
 import os

@@ -22,3 +22,15 @@ train/__pycache__/
 # OS
 .DS_Store
 .claude
+
+# Secrets
+.env
+
+# Dataset — lives on HF Hub (NightPrince/muslim-6b-v1-dataset), not git
+*.jsonl
+*.parquet
+
+# Run logs / operational artifacts — local only
+logs/
+heartbeat.log
+watchdog.log

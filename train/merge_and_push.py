@@ -14,9 +14,9 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 BASE_MODEL = "Applied-Innovation-Center/Karnak-6B-v1.0"
-ADAPTER_DIR = "outputs/karnak-muslim-lora-v1"
-MERGED_DIR = "outputs/Muslim-6B"
-HUB_REPO = "NightPrince/Muslim-6B"
+ADAPTER_DIR = "outputs/karnak-muslim-lora-v4"
+MERGED_DIR = "outputs/Muslim-6B-PRO"
+HUB_REPO = "NightPrince/Muslim-6B-PRO"
 
 
 def main():
@@ -31,6 +31,29 @@ def main():
 
     tokenizer = AutoTokenizer.from_pretrained(ADAPTER_DIR)
 
+    # CRITICAL FIX (v4): sft_lora.py deliberately restores the tokenizer's
+    # ORIGINAL chat_template (as shipped by Karnak-6B-v1.0 upstream) before
+    # saving the adapter, so the training-time patched copy
+    # (train/karnak_training_chat_template.jinja, fixed earlier this
+    # project) never reaches this point. Verified this session: Karnak's
+    # own shipped chat_template has the IDENTICAL bug --
+    # `tool_call.arguments | tojson` double-encodes an already-JSON-string
+    # argument. Without this patch, the merged v4/V1 model would ship with
+    # the exact same double-encoding bug that broke every real tool call in
+    # v3's production serving. Apply the same one-line fix here, to the
+    # template that actually gets saved/served.
+    if "tool_call.arguments | tojson" in tokenizer.chat_template:
+        tokenizer.chat_template = tokenizer.chat_template.replace(
+            "tool_call.arguments | tojson", "tool_call.arguments"
+        )
+        print("patched chat_template: removed double-JSON-encoding of tool_call.arguments")
+    else:
+        raise RuntimeError(
+            "expected 'tool_call.arguments | tojson' in the tokenizer's chat_template "
+            "but did not find it -- the upstream template may have changed; verify the "
+            "double-encoding bug is still present/absent before proceeding, don't silently skip this."
+        )
+
     print(f"saving merged model to {MERGED_DIR} ...")
     model.save_pretrained(MERGED_DIR, safe_serialization=True)
     tokenizer.save_pretrained(MERGED_DIR)
@@ -38,7 +61,7 @@ def main():
     print(f"creating Hub repo {HUB_REPO} (public)...")
     create_repo(HUB_REPO, private=False, exist_ok=True)
 
-    with open("train/MODEL_CARD.md", encoding="utf-8") as f:
+    with open("train/MODEL_CARD_PRO.md", encoding="utf-8") as f:
         readme = f.read()
     with open(f"{MERGED_DIR}/README.md", "w", encoding="utf-8") as f:
         f.write(readme)

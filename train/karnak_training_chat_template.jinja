@@ -39,7 +39,7 @@
             {{- '\n<tool_call>\n{"name": "' }}
             {{- tool_call.name }}
             {{- '", "arguments": ' }}
-            {{- tool_call.arguments | tojson }}
+            {{- tool_call.arguments }}
             {{- '}\n</tool_call>' }}
         {%- endfor %}
         {{- '<|im_end|>\n' }}

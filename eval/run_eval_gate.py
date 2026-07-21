@@ -11,6 +11,7 @@ Run: CUDA_VISIBLE_DEVICES=1 .venv/bin/python eval/run_eval_gate.py 2>&1 | tee lo
 """
 
 import json
+import pathlib
 import re
 import sys
 
@@ -18,13 +19,18 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-sys.path.insert(0, "/home/yahya/YA/Muslim-model")
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 from eval.probe_prompts import PROBES
+from eval.probe_prompts_v2 import PROBES_V2
+from eval.probe_prompts_v4 import PROBES_V4
+
+PROBES = PROBES + PROBES_V2 + PROBES_V4
 
 BASE_MODEL = "Applied-Innovation-Center/Karnak-6B-v1.0"
-ADAPTER_DIR = "outputs/karnak-muslim-lora-v1"
+ADAPTER_DIR = "outputs/karnak-muslim-lora-v4"
 SYSTEM_PROMPT_FILE = "dataset/muslim_system_prompt.txt"
-TRAIN_FILE = "dataset/muslim_lora_train.jsonl"
+TRAIN_FILE = "dataset/muslim_lora_train_v4.jsonl"
 
 ARABIC_INDIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
 DIGIT_RE = re.compile(r"[0-9" + ARABIC_INDIC_DIGITS + "]")
