@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/identity/muslim-6b-pro-banner-dark.png" alt="Muslim-6B-PRO" width="100%" />
+  <img src="assets/identity/muslim-6b-pro-banner-light.png" alt="Muslim-6B-PRO" width="100%" />
 </p>
 
 # Muslim-6B-PRO — Fine-Tuning
