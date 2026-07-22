@@ -161,19 +161,19 @@ def main():
         # Checkpointing every 40 steps (~1.3-1.5h at observed pace) bounds
         # the worst-case loss from any future interruption to that window.
         eval_strategy="steps",
-        eval_steps=50,  # lowered from 100 after a checkpoint-300->400 loss: tmux server was
-                        # killed (without a full WSL2/VM reboot -- uptime was unchanged) while
-                        # mid-eval at step 400, costing the full 100-step gap. Tightened back
-                        # to 50 to bound future losses to ~1.5-1.9h instead of ~3-3.9h. NOTE:
-                        # on resume, the actually-effective value comes from
-                        # TrainerState.eval_steps/save_steps (loaded from the checkpoint's
-                        # trainer_state.json), NOT from this TrainingArguments value --
-                        # DefaultFlowCallback checks state.eval_steps, and resuming does not
-                        # overwrite it from args (only prints a mismatch warning). Any future
-                        # change here MUST also be hand-patched into the latest checkpoint's
-                        # trainer_state.json before resuming, or it will be silently ignored.
+        eval_steps=100,  # raised back to 100 after resuming from checkpoint-350 (near the end
+                         # of the run, 474 total steps): next eval lands at 400 (redoing the one
+                         # lost to a connection-layer tmux kill), then nothing until the forced
+                         # final eval at 474 -- deliberately no eval at 450 per user request.
+                         # NOTE: on resume, the actually-effective value comes from
+                         # TrainerState.eval_steps/save_steps (loaded from the checkpoint's
+                         # trainer_state.json), NOT from this TrainingArguments value --
+                         # DefaultFlowCallback checks state.eval_steps, and resuming does not
+                         # overwrite it from args (only prints a mismatch warning). Any future
+                         # change here MUST also be hand-patched into the latest checkpoint's
+                         # trainer_state.json before resuming, or it will be silently ignored.
         save_strategy="steps",
-        save_steps=50,
+        save_steps=100,
         save_total_limit=2,  # keep the 2 most recent -- enough margin if the latest write
                             # is ever mid-flush during an interruption, without wasting disk
         load_best_model_at_end=True,

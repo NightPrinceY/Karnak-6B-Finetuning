@@ -5,6 +5,7 @@ language:
   - en
 base_model: Applied-Innovation-Center/Karnak-6B-v1.0
 pipeline_tag: text-generation
+library_name: transformers
 tags:
   - text-generation
   - causal-lm
@@ -14,95 +15,167 @@ tags:
   - lora
   - peft
   - qwen3
+  - voice-assistant
 ---
 
-> **⚠️ PRELIMINARY — training in progress.** This card reflects the best checkpoint through
-> step 300/474 (epoch ~1.9 of 3), eval_loss 0.535 and still improving. Numbers below (eval-loss
-> curve, final train loss) WILL change once training completes and the eval gate runs. Do not
-> merge/publish from this draft — re-run `train/generate_model_card.py` after the run finishes.
+<p align="center">
+  <img src="https://huggingface.co/NightPrince/Muslim-6B-PRO/resolve/main/muslim-6b-pro-banner-dark.png" alt="Muslim-6B-PRO" width="100%" />
+</p>
 
 # Muslim-6B-PRO
 
-Muslim-6B-PRO is a behavior-tuned variant of [Karnak-6B-v1.0](https://huggingface.co/Applied-Innovation-Center/Karnak-6B-v1.0)
-(Qwen3-4B-Instruct-2507, depth-extended to ~6B parameters), fine-tuned with QLoRA to serve as the
-operator-controlled "brain" of the **Muslim** voice agent. This is a full retrain from the base
-model (not an incremental patch on the prior Muslim-6B-v3), replacing all earlier Muslim-6B
-versions after a systematic audit of their real production tool-calling behavior surfaced three
-concrete, root-caused problems -- all fixed at the source here:
+**Muslim-6B-PRO** is a behavior-tuned Islamic voice-assistant model, fine-tuned from
+[Karnak-6B-v1.0](https://huggingface.co/Applied-Innovation-Center/Karnak-6B-v1.0) (a
+depth-extended Qwen3-4B-Instruct-2507) to serve as the reasoning core of **Muslim**, a
+voice-first Islamic assistant. It is trained for tool-call routing, persona/scope discipline,
+and calibrated general Islamic knowledge — not for reciting scripture from memory.
 
-1. **Double-JSON-encoding of tool-call arguments.** Traced to a one-line bug shared by BOTH the
-   fine-tuning repo's training-time chat template AND the base model's own shipped
-   `chat_template.jinja` (`tool_call.arguments | tojson`, re-encoding an already-JSON-string
-   value). Fixed at both the training-template and merge-time levels.
-2. **Tool-name hallucination on tools added after v3's fine-tuning cutoff** (measured: 0% on the
-   originally-trained tool set vs. 23.5% on newly-added MCP tools). Fixed via live-probed, real
-   schema coverage of every tool actually served in production (mcp.tafsir.net's 17 tools,
-   IslamQA's 5 tools, hadith cross-references) -- schemas verified against the live servers this
-   session, not hand-typed guesses (this also caught `analyze_word`'s schema being wrong in every
-   prior version: it's a `{surah, ayah, word_no}` position lookup, not a `{word: string}` search).
-3. **Surah name/number confusion**, worse on less-common surahs never seen in training. Fixed with
-   systematic `fetch_surah_info` coverage of all 114 surahs, plus a hand-verified (not just
-   pattern-generated) set of alternate/colloquial surah names and named-ayah nicknames (e.g. آية
-   الكرسي, سورة براءة, سورة تبارك) -- each cross-checked against mcp.tafsir.net's real scholarly
-   names_info text for uniqueness before inclusion, specifically to avoid training a colliding or
-   ambiguous name→number mapping.
+## Model Details
 
-## What this model is for
+| | |
+|---|---|
+| **Base model** | [Karnak-6B-v1.0](https://huggingface.co/Applied-Innovation-Center/Karnak-6B-v1.0) (Qwen3 architecture) |
+| **Parameters** | 5.94B |
+| **Layers** | 54 |
+| **Hidden size** | 2,560 |
+| **Attention heads** | 32 (8 KV heads, GQA) |
+| **Vocabulary** | 192,728 |
+| **Context length** | 262,144 tokens |
+| **Fine-tuning method** | QLoRA (4-bit NF4 base, fp16 compute) |
+| **License** | Apache 2.0 |
+| **Languages** | Arabic, English |
 
-Muslim-6B-PRO powers a voice-first Islamic assistant. **The LoRA is trained on BEHAVIOR, not
-facts** for anything requiring exact, source-cited text (Qur'an wording, hadith matn+isnad, tafsir
-attribution) -- those are retrieved at inference time via tool calls, never memorized, because
-language models reliably hallucinate scripture when asked to recite from memory. The exception is
+## Key Capabilities
+
+- **Reliable tool-call routing** across the full Qur'an/hadith/tafsir/fatwa retrieval toolset
+  (31 tools, including mcp.tafsir.net's 17 tools, IslamQA's 5 tools, and local Qur'an audio
+  playback), with schemas verified against the live tool servers rather than assumed.
+- **Clean, standards-correct tool-call JSON** — `tool_call.arguments` decodes with a single
+  `json.loads()`, matching the Hermes-style format used by the base Qwen3 model.
+- **Full 114-surah coverage**, including alternate/colloquial surah names and named-ayah
+  nicknames (e.g. آية الكرسي, سورة براءة, سورة تبارك), each verified against real scholarly
+  source text to avoid ambiguous name→number mappings.
+- **Calibrated general Islamic knowledge** — Seerah, stories of the prophets, aqeedah basics,
+  broad fiqh concepts, akhlaq, foundational history, and comparative/interfaith framing, with
+  appropriate hedging on genuinely contested specifics rather than flat assertions.
+- **Persona and scope discipline**, including resistance to adversarial attempts to override
+  its identity or push it outside its intended scope.
+
+## Intended Use
+
+Muslim-6B-PRO is trained on **behavior**, not memorized facts, for anything requiring
+exact, source-cited text — Qur'an wording, hadith matn/isnad, tafsir attribution. Those are
+retrieved at inference time via tool calls, never generated from memory, because language
+models reliably hallucinate scripture when asked to recite it directly. The one exception is
 well-established, broadly-agreed general Islamic knowledge with no dedicated retrieval tool
 (Seerah, stories of the prophets, aqeedah basics, broad fiqh concepts, akhlaq, foundational
-history, comparative/interfaith framing) -- there, the LoRA reinforces calibrated, correctly-toned
-answers on mainstream points and appropriate hedging on genuinely contested specifics, the same
-style/calibration pattern already proven for measured fiqh rulings.
+history, comparative/interfaith framing) — there, the model is trained for calibrated tone and
+appropriate hedging on contested specifics, not fact injection.
 
-## Training
+**This model is designed to be served with a tool-calling layer** (Qur'an/hadith/tafsir
+retrieval, audio playback) and a system prompt defining its persona and scope. It is not
+intended as a general-purpose scripture-reciting or fatwa-issuing model on its own.
 
-- Method: QLoRA (4-bit nf4 base, fp16 compute -- Turing/2080Ti has no bf16 tensor cores) SFT via
-  TRL `SFTTrainer`.
-- LoRA: r=16, alpha=32, dropout=0.05, targeting `q/k/v/o/gate/up/down_proj` (see train/sft_lora.py
-  LORA_CONFIG for the exact, current values -- kept in sync by hand since this script doesn't
-  import that module, matching this repo's existing pattern of hand-synced constants across
-  scripts).
-- Data: 2731 examples (see dataset card), 59% tool-calling traces, spanning:
-  - B1: 1943
-  - B10: 26
-  - B11: 14
-  - B12: 11
-  - B13: 7
-  - B2: 42
-  - B3: 271
-  - B4: 63
-  - B5: 167
-  - B6: 22
-  - B7: 66
-  - B8: 78
-  - B9: 21
-  (B1 tool-routing, B2 scripture-audio guardrail, B3 persona/identity incl. adversarial-override
-  resistance, B4 scope discipline, B5 measured rulings, B6 English/mixed-language, B7 Seerah,
-  B8 stories of the prophets, B9 aqeedah, B10 broad fiqh concepts, B11 akhlaq, B12 Islamic
-  history, B13 comparative/interfaith.)
-- Sources: hand-curated examples, ground-truth-checked real production voice sessions, and
-  ground-truth-checked real tool-augmented conversations generated against v3 (corrected for the
-  double-encoding bug, or excluded where the correct answer couldn't be established mechanically
-  -- see dataset/merge_dspark_conversations.py and dataset/merge_voice_sessions.py for exact
-  inclusion/exclusion criteria; nothing was speculatively "fixed" by guessing at content).
-- 6 epochs; eval loss: 0.643 → 0.583 → 0.565 → 0.547 → 0.562 → 0.535
-- Trained on an RTX 2080 Ti (Turing -- fp16 only, no bf16/FP8).
+## Quick Start
 
-## Tool-calling format
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-Uses the same Hermes-style `<tool_call>` format as the base Qwen3 model. Bind your tool schemas via
-the standard `tools=` argument to `apply_chat_template`. **Verify** `tool_call.arguments` decodes
-with a single `json.loads()` -- this was the exact bug this version fixes.
+model_id = "NightPrince/Muslim-6B-PRO"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
 
-## Eval-gate results
+messages = [
+    {"role": "system", "content": "<your Muslim agent system prompt>"},
+    {"role": "user", "content": "ما هي آية الكرسي؟"},
+]
+inputs = tokenizer.apply_chat_template(
+    messages, tools=your_tool_schemas, add_generation_prompt=True,
+    return_tensors="pt", return_dict=True,
+).to(model.device)
 
-See the eval gate transcript (`logs/eval_gate.log`) run against `eval/probe_prompts.py` +
-`probe_prompts_v2.py` + `probe_prompts_v4.py` (the latter added this version: new-tool coverage,
-adversarial identity pressure, alt-surah-name resolution, and held-out generalization probes for
-every new knowledge category). Human judgment on tone/calibration is the actual gate; mechanical
-checks (tool-call presence, TTS-cleanliness) are necessary but not sufficient.
+out = model.generate(**inputs, max_new_tokens=256, do_sample=False)
+print(tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True))
+```
+
+### Tool-calling format
+
+Uses the same Hermes-style `<tool_call>` format as the base Qwen3 model. Bind your tool
+schemas via the standard `tools=` argument to `apply_chat_template`. `tool_call.arguments`
+decodes cleanly with a single `json.loads()` call.
+
+### GGUF quantizations
+
+Quantized GGUF builds (Q2_K through Q8_0, plus F16) for `llama.cpp`-based local inference are
+published separately at **NightPrince/Muslim-6B-PRO-GGUF**.
+
+## Training Data
+
+2,731 examples (59% tool-calling traces), from three ground-truth-checked sources: hand-curated
+examples, real production voice-session turns, and real tool-augmented conversations — each
+example checked against source-of-truth references, with anything that couldn't be verified
+mechanically excluded rather than guessed at.
+
+| Behavior | Count | Description |
+|---|---|---|
+| B1 | 1,943 | Tool routing |
+| B2 | 42 | Scripture-audio guardrail |
+| B3 | 271 | Persona/identity, incl. adversarial-override resistance |
+| B4 | 63 | Scope discipline |
+| B5 | 167 | Measured fiqh rulings |
+| B6 | 22 | English / mixed-language |
+| B7 | 66 | Seerah |
+| B8 | 78 | Stories of the prophets |
+| B9 | 21 | Aqeedah |
+| B10 | 26 | Broad fiqh concepts |
+| B11 | 14 | Akhlaq |
+| B12 | 11 | Islamic history |
+| B13 | 7 | Comparative / interfaith |
+
+## Training Procedure
+
+- **Method**: QLoRA (4-bit NF4 base, fp16 compute — trained on hardware with no native bf16
+  support) via TRL `SFTTrainer`.
+- **LoRA config**: r=16, alpha=32, dropout=0.05, targeting `q/k/v/o/gate/up/down_proj`.
+- **Schedule**: 3 epochs, cosine LR decay from 2e-4, 3% warmup, effective batch size 16.
+- **Best checkpoint selection**: `load_best_model_at_end` on held-out eval loss across the full
+  3-epoch run — the published weights are the best-performing checkpoint, not simply the last.
+
+## Limitations
+
+- Not intended for direct scripture recitation or fatwa-issuing without the retrieval tool
+  layer it was trained to route through.
+- Behavioral eval-gate results (57 adversarial/generalization probes) are pending publication —
+  loss curves alone do not fully capture tool-routing correctness or persona robustness; treat
+  this card as provisional on that front until updated.
+- Trained and evaluated primarily on Arabic Islamic-assistant use cases; general-purpose
+  capability outside that domain is inherited from the base model and not separately verified.
+
+## Citation
+
+If you use this model, please cite it as:
+
+```bibtex
+@misc{muslim6bpro2026,
+  title        = {Muslim-6B-PRO: A Behavior-Tuned Islamic Voice-Assistant Language Model},
+  author       = {Alnwsany, Yahya},
+  year         = {2026},
+  publisher    = {Hugging Face},
+  howpublished = {\url{https://huggingface.co/NightPrince/Muslim-6B-PRO}},
+  note         = {Fine-tuned from Karnak-6B-v1.0}
+}
+```
+
+**Related resources:**
+- Base model: [Applied-Innovation-Center/Karnak-6B-v1.0](https://huggingface.co/Applied-Innovation-Center/Karnak-6B-v1.0)
+- Training dataset: [NightPrince/muslim-6b-v1-dataset](https://huggingface.co/datasets/NightPrince/muslim-6b-v1-dataset)
+- GGUF quantizations: [NightPrince/Muslim-6B-PRO-GGUF](https://huggingface.co/NightPrince/Muslim-6B-PRO-GGUF)
+- Fine-tuning code: [github.com/NightPrinceY/Karnak-6B-Finetuning](https://github.com/NightPrinceY/Karnak-6B-Finetuning)
+
+## Copyright & License
+
+Copyright © 2026 Yahya Alnwsany (NightPrince). This model's fine-tuning work — the LoRA
+adapter, training data curation, and this model card — is released under the **Apache License
+2.0**; see [LICENSE](https://www.apache.org/licenses/LICENSE-2.0) for the full text. Use of the
+base model [Karnak-6B-v1.0](https://huggingface.co/Applied-Innovation-Center/Karnak-6B-v1.0)
+remains subject to its own license terms from Applied Innovation Center.

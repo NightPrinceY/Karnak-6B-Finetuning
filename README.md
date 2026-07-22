@@ -1,78 +1,97 @@
-# Muslim-mode-finetuning
+<p align="center">
+  <img src="assets/identity/muslim-6b-pro-banner-dark.png" alt="Muslim-6B-PRO" width="100%" />
+</p>
 
-QLoRA fine-tuning of **Karnak-6B** (`Applied-Innovation-Center/Karnak-6B-v1.0`) to become the brain of the **مُسلِم** (Muslim) Arabic Islamic voice agent.
+# Muslim-6B-PRO — Fine-Tuning
+
+QLoRA fine-tuning of **Karnak-6B** (`Applied-Innovation-Center/Karnak-6B-v1.0`) into
+**Muslim-6B-PRO**, the reasoning core of **مُسلِم** (Muslim), an Arabic/English Islamic voice
+assistant.
 
 ## What this is
 
-A light LoRA that teaches **behavior, not facts**:
+A behavior-tuned LoRA — trained on **behavior, not facts**:
 
-- **Tool routing** — call the right tool (`get_tafsir_verse`, `play_ayah`, `search_hadith`, …) instead of answering from memory
-- **Scripture guardrail** — never recite Qur'an or hadith text from weights; always route to audio/lookup tools
-- **Persona & identity** — self-identifies as «مُسلِم», creator «يحيى النوساني»
-- **Scope discipline** — one-line redirect for off-topic (football, coding, …)
-- **Measured rulings** — calm, sourced responses; no unprompted hardline verdicts
-- **TTS-clean Arabic** — zero digits, markdown, or Latin in spoken output
+- **Tool routing** — call the right tool (`get_tafsir_verse`, `play_ayah`, `search_hadith`, and
+  28 others across the Qur'an/hadith/tafsir/fatwa toolset) instead of answering from memory
+- **Scripture guardrail** — never recite Qur'an or hadith text from weights; always route to
+  audio/lookup tools
+- **Persona & identity** — self-identifies as «مُسلِم», resists adversarial attempts to override
+  its identity or scope
+- **Scope discipline** — a one-line redirect for off-topic requests
+- **Measured rulings** — calm, sourced responses on fiqh; appropriate hedging on contested points
+- **Calibrated general knowledge** — Seerah, stories of the prophets, aqeedah, akhlaq, history,
+  and comparative/interfaith framing, with no dedicated retrieval tool needed
+- **TTS-clean output** — no digits, markdown, or stray Latin in spoken Arabic responses
 
-Facts (Qur'an text, hadith, tafsir) are supplied at inference by the agent's MCP tools — never baked into the weights.
+Facts requiring exact, source-cited text (Qur'an wording, hadith matn/isnad, tafsir attribution)
+are supplied at inference by real tool calls — never memorized into the weights, because language
+models reliably hallucinate scripture when asked to recite it directly.
 
 ## Model output
 
-The fine-tuned model (v1, LoRA merged into base) is publicly available on Hugging Face:
-
-**[NightPrince/Muslim-6B](https://huggingface.co/NightPrince/Muslim-6B)**
+**[NightPrince/Muslim-6B-PRO](https://huggingface.co/NightPrince/Muslim-6B-PRO)** — the merged,
+publish-ready model.
+**[NightPrince/Muslim-6B-PRO-GGUF](https://huggingface.co/NightPrince/Muslim-6B-PRO-GGUF)** —
+GGUF quantizations (Q2_K through Q8_0, plus F16) for local inference via `llama.cpp`.
 
 ## Base model
 
-[Applied-Innovation-Center/Karnak-6B-v1.0](https://huggingface.co/Applied-Innovation-Center/Karnak-6B-v1.0) — a Qwen3-based Arabic LLM depth-extended to ~5.94B parameters (54 layers, vocab 192,728), Apache-2.0 license.
+[Applied-Innovation-Center/Karnak-6B-v1.0](https://huggingface.co/Applied-Innovation-Center/Karnak-6B-v1.0)
+— a Qwen3-based Arabic LLM depth-extended to 5.94B parameters (54 layers, vocab 192,728),
+Apache-2.0 license.
 
 ## Repo structure
 
 ```
 dataset/
-  muslim_lora_train_v2.jsonl   # 362 training examples
-  muslim_lora_val_v2.jsonl     # 31 validation examples
-  build_lora_dataset.py        # deterministic dataset builder
-  validate_dataset.py          # schema / TTS-clean / dedup checks
-  DATACARD.md                  # full dataset provenance and behavior budget
-  muslim_system_prompt.txt     # the real agent system prompt (used as system turn)
-  quran.json                   # bundled surah metadata (standalone ground truth)
+  muslim_lora_train_v4.jsonl       # final training split (2,513 examples)
+  muslim_lora_val_v4.jsonl         # held-out validation split (218 examples)
+  build_lora_dataset_v4.py         # deterministic dataset builder
+  merge_dspark_conversations.py    # ground-truth-checked real tool-augmented conversations
+  merge_voice_sessions.py          # ground-truth-checked real production voice-session turns
+  verify_surah_facts.py            # independent fact-check gate for every surah/ayah claim
+  validate_dataset.py              # schema / TTS-clean / dedup checks
+  DATACARD_V4.md                   # full dataset provenance and behavior budget
 
 train/
-  sft_lora.py                  # main training script (TRL SFTTrainer, QLoRA)
+  sft_lora.py                      # main training script (TRL SFTTrainer, QLoRA)
   karnak_training_chat_template.jinja  # patched template with {% generation %} markers
-  merge_and_push.py            # merge LoRA into base and push to HF Hub
-  MODEL_CARD.md                # model card template
+  merge_and_push.py                # merge LoRA into base, optionally push to HF Hub
+  generate_model_card.py           # generates the model card from real trainer_state.json metrics
+  delete_old_versions.py           # cleanup for superseded HF repos
+  MODEL_CARD_PRO.md                # the published model card
 
 eval/
-  run_eval_gate.py             # eval gate runner (base vs base+LoRA probe comparison)
-  probe_prompts.py             # 18 probes across B1–B6 behavior categories
-  probe_prompts_v2.py          # expanded probe set for v2 eval
+  run_eval_gate.py                 # eval gate runner (base vs base+LoRA probe comparison)
+  probe_prompts.py / _v2.py / _v4.py   # 57 probes across all behavior categories
 
-docs/
-  Muslim-Karnak-finetune-plan.md  # full design brief
+assets/identity/
+  muslim-6b-pro-banner-{light,dark}.png  # horizontal identity poster
+  muslim-6b-pro-icon.png                 # square mark
+  muslim-6b-pro-social-card.png          # 1280x640 social preview card
+
+watchdog.sh / watchdog_check_once.sh
+  Auto-recovery for the training process if it dies without a full host restart
+  (observed during this project as a connection-layer issue, not a training bug).
 ```
 
 ## Training setup
 
 - **Hardware:** RTX 2080 Ti (Turing, SM75, 11 GB) — fp16 only, no bf16
-- **Method:** QLoRA 4-bit nf4, LoRA r=16 α=32, 3 epochs, lr=2e-4 cosine
+- **Method:** QLoRA 4-bit NF4, LoRA r=16 α=32 dropout=0.05, 3 epochs, lr=2e-4 cosine schedule
 - **Target modules:** `q_proj k_proj v_proj o_proj gate_proj up_proj down_proj`
-- **Dataset:** 393 examples total (362 train / 31 val), 71% tool-calling traces
-- **Runtime:** ~42 min on a single 2080 Ti
+- **Dataset:** 2,731 examples (2,513 train / 218 val), 59% tool-calling traces
+- **Best checkpoint:** selected via `load_best_model_at_end` on held-out eval loss across the
+  full 3-epoch run, not simply the final step
 
-## Eval gate results (v1)
+## Eval gate
 
-18 probes across all behavior categories. Clear wins:
-
-| Category | Base | LoRA |
-|---|---|---|
-| B1 tool routing | 2/8 correct tool calls | 8/8 correct |
-| B2 scripture guardrail | 1/3 | 3/3 |
-| B3 persona (Arabic + English) | ✗ hallucinated "OpenAI" as creator | ✓ |
-| B4 scope redirect | ✗ wrote real Python code | ✓ one-line redirect |
-| TTS violations | 4 (markdown fence + digits) | 0 |
-
-Two caveats documented transparently in the [model card](https://huggingface.co/NightPrince/Muslim-6B) — v2 training targets both.
+The behavioral probe suite (`eval/probe_prompts.py` + `_v2.py` + `_v4.py`, 57 probes covering
+tool-routing, adversarial identity pressure, alt-surah-name resolution, and held-out
+generalization) is the actual quality gate — loss curves alone don't catch tool-routing or
+persona regressions. A full run is pending publication; see the [model card](https://huggingface.co/NightPrince/Muslim-6B-PRO)
+for current status.
 
 ## Creator
 

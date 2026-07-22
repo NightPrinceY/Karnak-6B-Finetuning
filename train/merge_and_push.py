@@ -5,8 +5,15 @@ Merging needs the full (non-quantized) base in memory at once (~12GB fp16) — t
 doesn't fit on a single 11GB 2080 Ti, so this runs on CPU (plenty of system RAM).
 No GPU needed; this is a one-time weight merge, not training.
 
-Run: .venv/bin/python train/merge_and_push.py
+Run (merge + save locally only, no Hub push):
+    .venv/bin/python train/merge_and_push.py
+Run (merge, then also push to the Hub):
+    .venv/bin/python train/merge_and_push.py --push
+The merge/push steps are split so GGUF conversion, old-repo cleanup, etc. can happen
+between the local merge and the actual public Hub push.
 """
+
+import argparse
 
 import torch
 from huggingface_hub import create_repo
@@ -20,6 +27,10 @@ HUB_REPO = "NightPrince/Muslim-6B-PRO"
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--push", action="store_true", help="also push the merged model to the Hub")
+    args = parser.parse_args()
+
     print("loading base model on CPU in fp16 for merge...")
     model = AutoModelForCausalLM.from_pretrained(BASE_MODEL, dtype=torch.float16, device_map="cpu")
 
@@ -58,13 +69,17 @@ def main():
     model.save_pretrained(MERGED_DIR, safe_serialization=True)
     tokenizer.save_pretrained(MERGED_DIR)
 
-    print(f"creating Hub repo {HUB_REPO} (public)...")
-    create_repo(HUB_REPO, private=False, exist_ok=True)
-
     with open("train/MODEL_CARD_PRO.md", encoding="utf-8") as f:
         readme = f.read()
     with open(f"{MERGED_DIR}/README.md", "w", encoding="utf-8") as f:
         f.write(readme)
+
+    if not args.push:
+        print(f"merge complete, saved locally to {MERGED_DIR} (not pushed -- rerun with --push when ready)")
+        return
+
+    print(f"creating Hub repo {HUB_REPO} (public)...")
+    create_repo(HUB_REPO, private=False, exist_ok=True)
 
     print(f"pushing to {HUB_REPO} ...")
     model.push_to_hub(HUB_REPO)

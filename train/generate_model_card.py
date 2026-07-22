@@ -132,7 +132,7 @@ style/calibration pattern already proven for measured fiqh rulings.
   double-encoding bug, or excluded where the correct answer couldn't be established mechanically
   -- see dataset/merge_dspark_conversations.py and dataset/merge_voice_sessions.py for exact
   inclusion/exclusion criteria; nothing was speculatively "fixed" by guessing at content).
-- {len(eval_losses) and f'{len(eval_losses)} epochs' or '3 epochs'}; eval loss: {eval_loss_str}
+- {log_history[-1]['epoch']:.0f} epochs; eval loss by checkpoint: {eval_loss_str}
 - Trained on an RTX 2080 Ti (Turing -- fp16 only, no bf16/FP8).
 
 ## Tool-calling format
