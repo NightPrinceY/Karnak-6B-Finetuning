@@ -104,10 +104,17 @@ Uses the same Hermes-style `<tool_call>` format as the base Qwen3 model. Bind yo
 schemas via the standard `tools=` argument to `apply_chat_template`. `tool_call.arguments`
 decodes cleanly with a single `json.loads()` call.
 
+### Try it live
+
+**[huggingface.co/spaces/NightPrince/muslim-6b-pro-demo](https://huggingface.co/spaces/NightPrince/muslim-6b-pro-demo)**
+— a free ZeroGPU chat demo with **real tool-calling**: it actually calls mcp.tafsir.net,
+islamqa-mcp.org, and real Qur'an audio CDNs live, instead of a scripted response. Also exposes an
+MCP server endpoint.
+
 ### GGUF quantizations
 
 Quantized GGUF builds (Q2_K through Q8_0, plus F16) for `llama.cpp`-based local inference are
-published separately at **NightPrince/Muslim-6B-PRO-GGUF**.
+published separately at **[NightPrince/Muslim-6B-PRO-GGUF](https://huggingface.co/NightPrince/Muslim-6B-PRO-GGUF)**.
 
 ## Training Data
 
@@ -170,6 +177,7 @@ If you use this model, please cite it as:
 - Base model: [Applied-Innovation-Center/Karnak-6B-v1.0](https://huggingface.co/Applied-Innovation-Center/Karnak-6B-v1.0)
 - Training dataset: [NightPrince/muslim-6b-v1-dataset](https://huggingface.co/datasets/NightPrince/muslim-6b-v1-dataset)
 - GGUF quantizations: [NightPrince/Muslim-6B-PRO-GGUF](https://huggingface.co/NightPrince/Muslim-6B-PRO-GGUF)
+- Live demo: [NightPrince/muslim-6b-pro-demo](https://huggingface.co/spaces/NightPrince/muslim-6b-pro-demo)
 - Fine-tuning code: [github.com/NightPrinceY/Karnak-6B-Finetuning](https://github.com/NightPrinceY/Karnak-6B-Finetuning)
 
 ## Copyright & License

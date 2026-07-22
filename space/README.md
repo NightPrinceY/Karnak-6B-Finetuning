@@ -96,7 +96,11 @@ hf repos create <namespace>/<name> --type space --space-sdk gradio --flavor zero
 hf upload <namespace>/<name> . --repo-type space
 ```
 
-## Model, dataset, and training details
+## Related resources
+
+- Full-precision model: [NightPrince/Muslim-6B-PRO](https://huggingface.co/NightPrince/Muslim-6B-PRO)
+- GGUF quantizations (for local `llama.cpp` inference): [NightPrince/Muslim-6B-PRO-GGUF](https://huggingface.co/NightPrince/Muslim-6B-PRO-GGUF)
+- Training dataset: [NightPrince/muslim-6b-v1-dataset](https://huggingface.co/datasets/NightPrince/muslim-6b-v1-dataset)
 
 See the main [project README](../README.md) and the [model card](https://huggingface.co/NightPrince/Muslim-6B-PRO)
 for the full training pipeline, dataset composition, and evaluation status.
