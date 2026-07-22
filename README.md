@@ -35,6 +35,13 @@ publish-ready model.
 **[NightPrince/Muslim-6B-PRO-GGUF](https://huggingface.co/NightPrince/Muslim-6B-PRO-GGUF)** —
 GGUF quantizations (Q2_K through Q8_0, plus F16) for local inference via `llama.cpp`.
 
+## Live demo
+
+**[huggingface.co/spaces/NightPrince/muslim-6b-pro-demo](https://huggingface.co/spaces/NightPrince/muslim-6b-pro-demo)**
+— a ZeroGPU chat demo with **real tool-calling**: the model actually calls mcp.tafsir.net,
+islamqa-mcp.org, and real Qur'an audio CDNs live, instead of a mocked or scripted response.
+Source + full write-up in [`space/`](space/).
+
 ## Base model
 
 [Applied-Innovation-Center/Karnak-6B-v1.0](https://huggingface.co/Applied-Innovation-Center/Karnak-6B-v1.0)
