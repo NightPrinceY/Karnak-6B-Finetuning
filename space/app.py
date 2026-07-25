@@ -12,6 +12,7 @@ import spaces  # noqa: F401  -- MUST be imported before torch
 
 import asyncio
 import json
+import os
 import re
 
 import gradio as gr
@@ -37,9 +38,14 @@ model.eval()
 # ---------------------------------------------------------------------------
 # Tools: local audio tools + live-fetched schemas from real public MCP servers
 # ---------------------------------------------------------------------------
+# HADITH_MCP_URL overridable via env: the public hadith-mcp.org is known to be
+# MITM'd/blocked on some networks (see /home/elijah/src/Muslim/docker-compose.yml),
+# so local dataset-generation/eval work points this at a self-hosted replacement
+# (github.com/ovehbe/hadith-mcp) instead -- the tool names/schemas are identical.
 MCP_SERVERS = [
     ("tafsir", "https://mcp.tafsir.net/mcp"),
     ("islamqa", "https://islamqa-mcp.org"),
+    ("hadith", os.environ.get("HADITH_MCP_URL", "https://hadith-mcp.org/mcp")),
 ]
 
 # Real everyayah.com per-ayah reciter keys (production audio_player.py's own
@@ -57,7 +63,42 @@ VALID_AYAH_RECITERS = {
 DEFAULT_AYAH_RECITER = "Minshawy_Murattal_128kbps"
 DEFAULT_SURAH_RECITER = "muhammad_siddeeq_al-minshaawee"
 
+# Verified surah-name -> number lookup (114 canonical + 225 classical alt-names,
+# systematically extracted from real scholarly text in
+# dataset/tafsir_net_surah_ground_truth.jsonl and collision-checked -- see
+# dataset/verify_surah_facts_v5.py for the extraction methodology). Backing a
+# real local tool with this instead of relying on the model to memorize
+# name->number mappings directly: the same "retrieved, not recited" principle
+# already used for tafsir/hadith/fatwa, applied to surah-name resolution.
+with open("surah_name_index.json", encoding="utf-8") as f:
+    SURAH_NAME_INDEX = json.load(f)
+
+_TASHKEEL_RE = re.compile("[ـً-ٰٟۖ-ۭ]")
+
+
+def _strip_tashkeel(t: str) -> str:
+    return _TASHKEEL_RE.sub("", t or "")
+
+
 LOCAL_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "resolve_surah_name",
+            "description": (
+                "تحديد رقم السورة (١-١١٤) من اسمها -- سواء كان اسمها الشائع أو أحد "
+                "أسمائها الاجتهادية أو التوقيفية الأخرى (مثل: تبارك، قلب القرآن، "
+                "عروس القرآن، فاتحة الكتاب). استخدم هذه الأداة دائماً أولاً كلما "
+                "ذكر المستخدم سورة باسمها، قبل استخدام أي أداة أخرى تحتاج رقم "
+                "السورة (مثل play_surah أو fetch_surah_info) -- لا تخمّن الرقم من الذاكرة."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -121,6 +162,15 @@ async def _fetch_all_tools():
         try:
             server_tools = await _mcp_list_tools(url)
             for t in server_tools:
+                if t.name in tool_to_url:
+                    # Two servers can expose a tool with the identical name but
+                    # different content (e.g. islamqa's and hadith-mcp's both have
+                    # 'fetch_grounding_rules') -- first-registered (MCP_SERVERS
+                    # order) wins rather than silently clobbering in the dict, and
+                    # we never emit two same-named tool schemas to the model.
+                    print(f"WARNING: tool name collision '{t.name}' -- '{label}' ({url}) "
+                          f"shadowed by an earlier server, skipping")
+                    continue
                 tools.append({
                     "type": "function",
                     "function": {
@@ -154,6 +204,12 @@ def _play_surah_url(surah: int, reciter: str | None) -> str:
 
 async def call_tool(name: str, arguments: dict) -> tuple[str, str | None]:
     """Dispatch a real tool call. Returns (text_result_for_model, audio_url_or_none)."""
+    if name == "resolve_surah_name":
+        query = _strip_tashkeel((arguments.get("name") or "").strip())
+        surah = SURAH_NAME_INDEX.get(query)
+        if surah is None:
+            return json.dumps({"found": False}, ensure_ascii=False), None
+        return json.dumps({"found": True, "surah": surah}, ensure_ascii=False), None
     if name == "play_ayah":
         url = _play_ayah_url(arguments.get("surah"), arguments.get("ayah"), arguments.get("reciter"))
         return "تم تشغيل الآية.", url

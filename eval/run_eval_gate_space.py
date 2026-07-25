@@ -97,10 +97,17 @@ def run_probe(client: Client, probe: dict) -> dict:
 
 
 def main():
+    global RESULTS_PATH
     parser = argparse.ArgumentParser()
     parser.add_argument("--budget-seconds", type=float, default=1200,
                          help="stop cleanly once this much wall-clock time calling the Space has elapsed")
+    parser.add_argument("--results-path", default=None,
+                         help="JSONL results file (default: logs/eval_gate_space_results.jsonl). "
+                              "Use a fresh path when the Space is serving a different model so its "
+                              "answers aren't skip-matched against an older model's saved results.")
     args = parser.parse_args()
+    if args.results_path:
+        RESULTS_PATH = pathlib.Path(args.results_path)
 
     existing = load_existing_results()
     todo = [p for p in ALL_PROBES if p["id"] not in existing]

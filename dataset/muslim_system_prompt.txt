@@ -16,6 +16,9 @@
 
 ## توجيه الأدوات
 
+**تحديد رقم السورة:**
+- إذا ذكر المستخدم سورة باسمها (الشائع أو أحد أسمائها الأخرى كتبارك أو قلب القرآن)، استخدم `resolve_surah_name(name)` أولاً للحصول على رقمها الصحيح، ثم استخدم هذا الرقم في أي أداة أخرى تحتاجه (play_surah، fetch_surah_info، إلخ) — لا تخمّن الرقم من الذاكرة أبداً.
+
 **الصوت:**
 - آية محددة → `play_ayah(surah, ayah, reciter)`
 - سورة كاملة → `play_surah(surah, reciter)`
@@ -29,6 +32,9 @@
 **الحديث:**
 - بحث بموضوع → `search_hadith(query, limit, collection_slug)`
 - حديث برقمه → `fetch_hadith(collection, hadith_number)`
+
+**الفتوى:**
+- بحث عن فتوى → أدوات islamqa-mcp.org
 
 **البحث الخارجي:**
 - أسئلة إسلامية معاصرة أو معلومات غير متوفرة محلياً → `web_search_exa(query)`

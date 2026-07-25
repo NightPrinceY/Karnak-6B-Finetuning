@@ -4,12 +4,17 @@ path as the Space (identical MCP dispatch / retry logic copied from
 tools/muslim-space/app.py) -- the only thing that changes is where generation
 happens (local vLLM on free lab GPUs instead of ZeroGPU).
 
-Appends to the SAME results file the Space run used
+By default appends to the SAME results file the Space run used
 (logs/eval_gate_space_results.jsonl) and skips probes already present there,
-so this is a pure continuation, not a separate run.
+so this is a pure continuation, not a separate run. Pass --results-path to
+target a different model/results file (e.g. re-running the full 57 against a
+new corrective build) without clobbering or skip-matching against an older
+model's saved answers.
 
-Run: CUDA_VISIBLE_DEVICES=1,4 .venv/bin/python eval/run_eval_gate_local_vllm.py
+Run: CUDA_VISIBLE_DEVICES=1,4 .venv/bin/python eval/run_eval_gate_local_vllm.py \\
+       [--results-path logs/eval_gate_v5_corrective_results.jsonl] [--model-path outputs/Muslim-6B-PRO-v5]
 """
+import argparse
 import asyncio
 import json
 import os
@@ -33,18 +38,30 @@ ALL_PROBES = PROBES + PROBES_V2 + PROBES_V4
 RESULTS_PATH = REPO_ROOT / "logs" / "eval_gate_space_results.jsonl"
 MODEL_PATH = str(REPO_ROOT / "outputs" / "Muslim-6B-PRO")
 SYSTEM_PROMPT = (REPO_ROOT / "space" / "system_prompt.txt").read_text(encoding="utf-8")
+with open(REPO_ROOT / "space" / "surah_name_index.json", encoding="utf-8") as _f:
+    SURAH_NAME_INDEX = json.load(_f)
 
 ARABIC_INDIC_DIGITS = "٠١٢٣٤٥٦٧٨٩"
 DIGIT_RE = re.compile(r"[0-9" + ARABIC_INDIC_DIGITS + "]")
 MARKDOWN_RE = re.compile(r"(\*\*|\*[^*]|`|^#|^- |^\d+\.\s|\|.*\|)", re.MULTILINE)
+_TASHKEEL_RE = re.compile("[ـً-ٰٟۖ-ۭ]")
+
+
+def _strip_tashkeel(t: str) -> str:
+    return _TASHKEEL_RE.sub("", t or "")
 
 # ---------------------------------------------------------------------------
 # Tools + MCP dispatch: copied verbatim from tools/muslim-space/app.py (the
 # real, already-verified-working Space source) so behavior matches exactly.
 # ---------------------------------------------------------------------------
+# HADITH_MCP_URL overridable via env: the public hadith-mcp.org is known to be
+# MITM'd/blocked on some networks (see /home/elijah/src/Muslim/docker-compose.yml),
+# so local dataset-generation/eval work points this at a self-hosted replacement
+# (github.com/ovehbe/hadith-mcp) instead -- the tool names/schemas are identical.
 MCP_SERVERS = [
     ("tafsir", "https://mcp.tafsir.net/mcp"),
     ("islamqa", "https://islamqa-mcp.org"),
+    ("hadith", os.environ.get("HADITH_MCP_URL", "https://hadith-mcp.org/mcp")),
 ]
 
 VALID_AYAH_RECITERS = {
@@ -61,6 +78,18 @@ DEFAULT_AYAH_RECITER = "Minshawy_Murattal_128kbps"
 DEFAULT_SURAH_RECITER = "muhammad_siddeeq_al-minshaawee"
 
 LOCAL_TOOLS = [
+    {"type": "function", "function": {
+        "name": "resolve_surah_name",
+        "description": (
+            "تحديد رقم السورة (١-١١٤) من اسمها -- سواء كان اسمها الشائع أو أحد "
+            "أسمائها الاجتهادية أو التوقيفية الأخرى (مثل: تبارك، قلب القرآن، "
+            "عروس القرآن، فاتحة الكتاب). استخدم هذه الأداة دائماً أولاً كلما "
+            "ذكر المستخدم سورة باسمها، قبل استخدام أي أداة أخرى تحتاج رقم "
+            "السورة (مثل play_surah أو fetch_surah_info) -- لا تخمّن الرقم من الذاكرة."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string"},
+        }, "required": ["name"]}}},
     {"type": "function", "function": {
         "name": "play_ayah", "description": "تشغيل صوت آية محددة بصوت قارئ مختار.",
         "parameters": {"type": "object", "properties": {
@@ -97,6 +126,13 @@ async def _fetch_all_tools():
         try:
             server_tools = await _mcp_list_tools(url)
             for t in server_tools:
+                if t.name in tool_to_url:
+                    # e.g. islamqa's and hadith-mcp's both have 'fetch_grounding_rules'
+                    # with different content -- first-registered wins, never emit two
+                    # same-named tool schemas to the model.
+                    print(f"WARNING: tool name collision '{t.name}' -- '{label}' ({url}) "
+                          f"shadowed by an earlier server, skipping")
+                    continue
                 tools.append({"type": "function", "function": {
                     "name": t.name, "description": t.description or "", "parameters": t.inputSchema,
                 }})
@@ -121,6 +157,12 @@ def _play_surah_url(surah: int, reciter: str | None) -> str:
 
 
 async def call_tool(name: str, arguments: dict, tool_to_url: dict) -> tuple[str, str | None]:
+    if name == "resolve_surah_name":
+        query = _strip_tashkeel((arguments.get("name") or "").strip())
+        surah = SURAH_NAME_INDEX.get(query)
+        if surah is None:
+            return json.dumps({"found": False}, ensure_ascii=False), None
+        return json.dumps({"found": True, "surah": surah}, ensure_ascii=False), None
     if name == "play_ayah":
         url = _play_ayah_url(arguments.get("surah"), arguments.get("ayah"), arguments.get("reciter"))
         return "تم تشغيل الآية.", url
@@ -185,6 +227,20 @@ def append_result(r: dict) -> None:
 
 
 def main():
+    global RESULTS_PATH, MODEL_PATH
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--results-path", default=None,
+                         help="JSONL results file (default: logs/eval_gate_space_results.jsonl). "
+                              "Use a fresh path when evaluating a different model so its answers "
+                              "aren't skip-matched against an older model's saved results.")
+    parser.add_argument("--model-path", default=None,
+                         help="Local model dir to load (default: outputs/Muslim-6B-PRO)")
+    args = parser.parse_args()
+    if args.results_path:
+        RESULTS_PATH = pathlib.Path(args.results_path)
+    if args.model_path:
+        MODEL_PATH = args.model_path
+
     existing = load_existing_results()
     todo = [p for p in ALL_PROBES if p["id"] not in existing]
     print(f"{len(existing)} probes already have saved results, skipping them.")

@@ -75,16 +75,20 @@ for path in FILES:
         else:
             seen_user[ukey] = tag
 
-        # tool round-trip validation
+        # tool round-trip validation -- iterate EVERY assistant-tool_calls/tool
+        # pair in order (not just the first), since v5 introduced multi-hop
+        # chains (e.g. search_answers -> fetch_answer) where a later hop going
+        # unvalidated would be a silent gap, not a rejection.
         has_tool = any(m["role"] == "tool" for m in msgs)
         if has_tool:
             tool_use += 1
-            # find assistant-with-tool_calls -> tool -> assistant
-            tc_msg = next((m for m in msgs if m["role"] == "assistant" and m.get("tool_calls")), None)
-            tl_msg = next((m for m in msgs if m["role"] == "tool"), None)
-            if not tc_msg:
+            tc_msgs = [m for m in msgs if m["role"] == "assistant" and m.get("tool_calls")]
+            tl_msgs = [m for m in msgs if m["role"] == "tool"]
+            if not tc_msgs:
                 err(tag, "tool message present but no assistant tool_calls")
-            else:
+            if len(tc_msgs) != len(tl_msgs):
+                err(tag, f"{len(tc_msgs)} tool_calls messages but {len(tl_msgs)} tool results")
+            for tc_msg, tl_msg in zip(tc_msgs, tl_msgs):
                 for tc in tc_msg["tool_calls"]:
                     fnname = tc["function"]["name"]
                     toolname_counts[fnname] += 1
@@ -105,7 +109,7 @@ for path in FILES:
                     if fnname == "play_surah" and "reciter" in args and args["reciter"] not in SURAH_KEYS:
                         warns.append(f"[{tag}] unknown surah reciter {args['reciter']}")
                     # tool_call_id linkage
-                    if tl_msg and tl_msg.get("tool_call_id") != tc["id"]:
+                    if tl_msg.get("tool_call_id") != tc["id"]:
                         warns.append(f"[{tag}] tool_call_id mismatch")
 
         # TTS-cleanliness of the FINAL assistant turn (spoken)
